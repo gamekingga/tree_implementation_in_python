@@ -2,10 +2,10 @@
 Python code to implement functions for a B-Tree
 """
 import bisect
+from math import ceil
 
 
-M = 3  # 2T-1 way search tree (Restricted M as an odd value)
-T = 2  # Every node except root must contain at least T-1 keys
+M = 4  # M-way search tree (Restricted M as an even value)
 
 class BTreeNode:
     """
@@ -20,7 +20,7 @@ class BTreeNode:
         """
 
         self.keys = []
-        self.C = [None] * (2 * T)
+        self.C = [None] * M
         self.n = 0
         self.is_leaf = is_leaf  # True when node is leaf. Otherwise false.
 
@@ -30,7 +30,7 @@ class BTree:
     """
 
     root = None
-    t = T
+    m = M
 
     @staticmethod
     def print_node(node):
@@ -43,11 +43,15 @@ class BTree:
         print(f'node.C : {printable_child_list}')
         print(f'node.n : {node.n}')
         print(f'node.is_leaf : {node.is_leaf}')
+        print()
 
-    def traverse(self, node=root):
+    def traverse(self, node=False):
         """
         Method to traverse the given node and its child nodes.
         """
+
+        if node is False:
+            node = self.root
 
         if node is None:
             return
@@ -59,10 +63,13 @@ class BTree:
             print(f'{node.keys[i]}')
         self.traverse(node.C[node.n])
 
-    def search(self, k, node=root) -> BTreeNode:
+    def search(self, k, node=False) -> BTreeNode:
         """
         Method to search key k in the given node (and its child nodes).
         """
+
+        if node is False:
+            node = self.root
 
         # Find the first key greater than or equal to k
         i = bisect.bisect_left(node.keys, k)
@@ -98,7 +105,7 @@ class BTree:
         # Start from Case3.
         # Because "New key should be inserted to a leaf node",
         # root node is full implies Case3 happens.
-        if self.root.n == (2 * self.t - 1):
+        if self.root.n == (self.m - 1):
             new_root = BTreeNode(False)
             new_root.C[0] = self.root
 
@@ -109,15 +116,15 @@ class BTree:
             i = 0
             if new_root.keys[0] < k:
                 i += 1
-            self._root_not_full_insert(new_root.C[i], k)
+            self._root_not_full_insert(k, new_root.C[i])
 
             self.root = new_root
 
         # Case1 & Case2
         else:
-            self._root_not_full_insert(self.root, k)
+            self._root_not_full_insert(k, self.root)
 
-    def _root_not_full_insert(self, node, k):
+    def _root_not_full_insert(self, k, node):
         """
         Dealing with Case1 & Case2 of insert.
         Top-down Approach to check if _split_child is needed, until we step to a leaf. (Case2)
@@ -136,7 +143,8 @@ class BTree:
             i = bisect.bisect_left(node.keys, k)
 
             # See if the found child is full
-            if node.C[i].n == (2 * self.t - 1):
+            # Skip this validation when m%2 != 0
+            if self.m % 2 == 0 and node.C[i].n == (self.m - 1):
                 # If the child is full, then split it.
                 self._split_child(i, node, node.C[i])
 
@@ -145,49 +153,52 @@ class BTree:
                 if node.keys[i] < k:
                     i += 1
 
-            self._root_not_full_insert(node.C[i], k)
+            self._root_not_full_insert(k, node.C[i])
 
     def _split_child(self, x, parent, node):
         """
+        *** Assume that Q = ceil(m/2) ***
+
         parent:
-        C[x] points to the node.
+        C[x] points to the given node.
          => poped_key should be assigned to keys[x],
             new_node should be assigned to C[x+1]
 
 
         Before split:
         node:
-         n     C    K    C    ...   K         C
-        2t-1 | c0 | k0 | c1 | ... | k(2t-2) | c(2t-1) |
+         n    C    K    C    ...   K         C
+        m-1 | c0 | k0 | c1 | ... | k(m-1) | cm |
 
         After split:
         node:
-         n     C    K    C        ...   K         C         K      C
-        t-1  | c0 | k0 | c1     | ... | k(t-2)  | c(t-1)  | None | None | ...
+         n    C    K    C    ...   K        C        K      C
+        Q-1 | c0 | k0 | c1 | ... | k(Q-2) | c(Q-1) | None | None | ...
 
         new_node:
-        n   C    K    C           ...   K         C         K      C
-        t-1  | ct | kt | c(t+1) | ... | k(2t-2) | c(2t-1) | None | None | ...
+        n     C    K    C        ...   K        C    K      C
+        Q-1 | cQ | kQ | c(Q+1) | ... | k(m-1) | cm | None | None | ...
 
         poped_key:
-        k(t-1)
+        k(Q-1)
         """
 
+        Q = ceil(self.m / 2)
         new_node = BTreeNode(node.is_leaf)
-        new_node.n = self.t - 1
+        new_node.n = Q - 1
 
-        # Copy the last t-1 keys (kt ~ k(2t-2)) of node to new_node and
-        # copy the last t child (ct ~ c(2t-1)) of node to new_node
-        new_node.keys = node.keys[-new_node.n:]  # new_node.n equals to t-1
-        new_node.C[:self.t] = node.C[-self.t:]
+        # Copy the last Q-1 keys (kQ ~ k(m-1)) of node to new_node and
+        # copy the last Q child (cQ ~ cm) of node to new_node
+        new_node.keys = node.keys[-new_node.n:]  # new_node.n equals to Q-1
+        new_node.C[:Q] = node.C[-Q:]
 
         # Put poped_key to parent
-        parent.keys.insert(x, node.keys[self.t - 1])
+        parent.keys.insert(x, node.keys[Q - 1])
         parent.C.insert(x + 1, new_node)
         parent.C.pop()
 
         # Update n, keys, and C of node
-        node.n = self.t - 1
+        node.n = Q - 1
         node.keys = node.keys[:node.n]
         for i in range(node.n + 1, len(node.C)):
             node.C[i] = None
@@ -206,7 +217,7 @@ class BTree:
             print('The tree is empty')
             return
 
-        self._remove(self.root, k)
+        self._remove(k, self.root)
 
         if self.root.n == 0:
             tmp = self.root
@@ -218,11 +229,14 @@ class BTree:
                 self.root = self.root.C[0]
             del tmp
 
-    def _remove(self, node, k):
+    def _remove(self, k, node):
         """
         Recursive function to find and remove the key k
         in this node and all its subtrees.
         """
+
+        # Assume that Q = ceil(m/2)
+        Q = ceil(self.m / 2)
 
         # Find the first key greater than or equal to k
         i = bisect.bisect_left(node.keys, k)
@@ -243,13 +257,13 @@ class BTree:
 
         # Otherwise, step into the child (recursion),
         # Check if node.C[i] will violate B-Tree definition after the deletion before recursion.
-        if node.C[i].n < self.t:
+        if node.C[i].n < Q:
             # node.C[i] will violate B-Tree definition after the deletion
-            # (node.C[i].n - 1 < (self.t - 1))
+            # (node.C[i].n - 1 < (ceil(m/2) - 1))
             #  => Need to rotate or merge
-            if i != 0 and node.C[i - 1].n >= self.t:
+            if i != 0 and node.C[i - 1].n >= Q:
                 self._right_rotate(i, node)
-            elif i != node.n and node.C[i + 1].n >= self.t:
+            elif i != node.n and node.C[i + 1].n >= Q:
                 self._left_rotate(i, node)
             else:
                 if i == node.n:
@@ -260,9 +274,9 @@ class BTree:
         if i > node.n:
             # Only happened when the last child of node is merged and gone.
             # (Before: i == node.n | After: i == node.n + 1)
-            self._remove(node.C[i - 1], k)
+            self._remove(k, node.C[i - 1])
         else:
-            self._remove(node.C[i], k)
+            self._remove(k, node.C[i])
 
     def _remove_from_non_leaf(self, x, node):
         """
@@ -274,33 +288,37 @@ class BTree:
         and then remove the predecessor/successor located in subtrees of the node.
 
         However, we check if node.C[x] will violate B-Tree definition after the deletion
-        before recursion (stepping into a child).
+        before recursion (stepping into a child and call _remove).
         There are 3 cases:
         1. node.C[x] is still a validate node after the deletion.
-           (node.C[x].n - 1 >= (self.t - 1))
-            => Replace k by predecessor, then step into node.C[x] to do the deletion.
+           (node.C[x].n - 1 >= (ceil(m/2) - 1))
+            => Replace k by predecessor, then step into node.C[x] to call _remove.
         2. Case1 failed, but node.C[x+1] is still a validate node after the deletion.
-           (node.C[x+1].n - 1 >= (self.t - 1))
-            => Replace k by successor, then step into node.C[x+1] to do the deletion.
+           (node.C[x+1].n - 1 >= (ceil(m/2) - 1))
+            => Replace k by successor, then step into node.C[x+1] to call _remove.
         3. Both Case1 and Case2 failed.
-            => Merge node.C[x] and node.C[x+1], then step into node.C[x] to do the deletion.
+            => Merge node.C[x] and node.C[x+1] as the updated node.C[x],
+               then step into node.C[x] to call _remove.
         """
 
+        # Assume that Q = ceil(m/2)
+        Q = ceil(self.m / 2)
+
         # Case1
-        if node.C[x].n >= self.t:
+        if node.C[x].n >= Q:
             predecessor = self._get_predecessor(x, node)
             node.keys[x] = predecessor
-            self._remove(node.C[x], predecessor)
+            self._remove(predecessor, node.C[x])
         # Case2
-        elif node.C[x + 1].n >= self.t:
+        elif node.C[x + 1].n >= Q:
             successor = self._get_successor(x, node)
             node.keys[x] = successor
-            self._remove(node.C[x + 1], successor)
+            self._remove(successor, node.C[x + 1])
         # Case3
         else:
             k = node.keys[x]
             self._merge(x, node)
-            self._remove(node.C[x], k)
+            self._remove(k, node.C[x])
 
     @staticmethod
     def _right_rotate(x, node):
@@ -469,9 +487,9 @@ Inorder traversal result would be
 # nums = [1, 3, 7, 10, 11, 13, 14, 15, 18, 16, 19, 24, 25, 26, 21, 4, 5, 20, 22, 2, 17, 12, 6]
 # for num in nums:
 #     myTree.insert(num)
-
+#
 # myTree.traverse(myTree.root)
-
+#
 # myTree.delete(6)
 # myTree.delete(13)
 # myTree.delete(7)
@@ -479,8 +497,8 @@ Inorder traversal result would be
 # myTree.delete(2)
 # myTree.delete(16)
 # myTree.delete(1)
-
+#
 # myTree.traverse(myTree.root)
-
+#
 
 # This code is contributed by Sammy Wen.
